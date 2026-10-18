@@ -377,9 +377,9 @@
       "apiToken": "esp32_token_alpha_9941",
       "isActive": true,
       "isSimulated": true,
-      "lastHeartbeat": "2026-10-18T03:56:43.326Z",
+      "lastHeartbeat": "2026-10-18T03:57:43.327Z",
       "firmwareVersion": "v2.1.0-krishak-ai",
-      "batteryPct": 82.00000000000108,
+      "batteryPct": 81.99000000000107,
       "createdAt": "2026-04-10T10:00:00Z"
     },
     {
@@ -393,9 +393,9 @@
       "apiToken": "soil_token_beta_2287",
       "isActive": true,
       "isSimulated": true,
-      "lastHeartbeat": "2026-10-18T03:56:43.334Z",
+      "lastHeartbeat": "2026-10-18T03:57:43.338Z",
       "firmwareVersion": "v1.8.4",
-      "batteryPct": 92.82000000000032,
+      "batteryPct": 92.81000000000031,
       "createdAt": "2026-04-12T11:00:00Z"
     },
     {
@@ -409,9 +409,9 @@
       "apiToken": "soil_token_nsk_5510",
       "isActive": true,
       "isSimulated": true,
-      "lastHeartbeat": "2026-10-18T03:56:43.348Z",
+      "lastHeartbeat": "2026-10-18T03:57:43.350Z",
       "firmwareVersion": "v1.9.0",
-      "batteryPct": 70.00000000000108,
+      "batteryPct": 69.99000000000107,
       "createdAt": "2026-05-01T09:00:00Z"
     }
   ],
@@ -11908,6 +11908,43 @@
       "signalRssi": -63,
       "id": "tel-mvdan8p9",
       "recordedAt": "2026-10-18T03:56:43.341Z"
+    },
+    {
+      "deviceId": "dev-esp32-01",
+      "fieldId": "field-101",
+      "airTemperatureC": 23.9,
+      "humidityPct": 62.5,
+      "batteryPct": 81.99000000000107,
+      "signalRssi": -64,
+      "id": "tel-mvdaoizf",
+      "recordedAt": "2026-10-18T03:57:43.323Z"
+    },
+    {
+      "deviceId": "dev-soil-01",
+      "fieldId": "field-101",
+      "soilMoisturePct": 14,
+      "soilTemperatureC": 21.4,
+      "airTemperatureC": 24.4,
+      "humidityPct": 60.6,
+      "nitrogenMgKg": 141,
+      "phosphorusMgKg": 31,
+      "potassiumMgKg": 194,
+      "batteryPct": 92.81000000000031,
+      "signalRssi": -65,
+      "id": "tel-mvdaoizo",
+      "recordedAt": "2026-10-18T03:57:43.332Z"
+    },
+    {
+      "deviceId": "dev-soil-02",
+      "fieldId": "field-201",
+      "soilMoisturePct": 14,
+      "soilTemperatureC": 20.5,
+      "airTemperatureC": 23.5,
+      "humidityPct": 63.3,
+      "batteryPct": 69.99000000000107,
+      "signalRssi": -64,
+      "id": "tel-mvdaoizx",
+      "recordedAt": "2026-10-18T03:57:43.341Z"
     }
   ],
   "cropDiagnoses": [
