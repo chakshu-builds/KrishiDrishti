@@ -132,15 +132,65 @@ router.get('/config', getNetworkInfoHandler);
 router.post('/set-tunnel', (req: Request, res: Response) => {
   if (req.body.tunnelUrl) {
     publicTunnelUrl = req.body.tunnelUrl.trim();
+    try {
+      const tunnelFile = path.resolve(process.cwd(), 'scripts', 'active_tunnel.txt');
+      fs.writeFileSync(tunnelFile, publicTunnelUrl, 'utf8');
+    } catch (_) {}
   }
   return res.json({ success: true, publicTunnelUrl });
 });
 
 /**
+ * Automatically initializes or restores latest survey result from disk
+ */
+export async function getOrInitLatestSurveyResult() {
+  if (latestSurveyResult) return latestSurveyResult;
+  try {
+    if (fs.existsSync(DRONE_UPLOADS_DIR)) {
+      const files = fs
+        .readdirSync(DRONE_UPLOADS_DIR)
+        .filter((f) => f.startsWith('drone_aerial_') && (f.endsWith('.jpg') || f.endsWith('.png') || f.endsWith('.jpeg')))
+        .map((f) => {
+          const fp = path.join(DRONE_UPLOADS_DIR, f);
+          const stat = fs.statSync(fp);
+          return { filename: f, filePath: fp, mtime: stat.mtimeMs, size: stat.size };
+        })
+        .filter((f) => f.size > 1024) // Ignore empty/dummy files
+        .sort((a, b) => b.mtime - a.mtime);
+
+      if (files.length > 0) {
+        const topFile = files[0];
+        const buffer = fs.readFileSync(topFile.filePath);
+        const analysis = await geminiService.analyzeFieldDroneZoning({
+          imageBuffer: buffer,
+          mimeType: 'image/jpeg',
+          cropName: 'Paddy / Field Crops (धान व फसल)',
+          fieldName: 'Surveyed Field Acreage',
+          altitudeMeters: 15,
+        });
+
+        latestSurveyResult = {
+          imageUrl: `/uploads/drone/${topFile.filename}`,
+          analysis,
+          timestamp: topFile.mtime,
+        };
+        return latestSurveyResult;
+      }
+    }
+  } catch (err) {
+    console.warn('[DroneScanner] Failed to auto-restore latest aerial survey:', err);
+  }
+  return null;
+}
+
+// Background auto-init on boot
+getOrInitLatestSurveyResult().catch(() => {});
+
+/**
  * POST /api/drone/session/create
  * Creates a unique pairing session for the laptop mission station
  */
-router.post('/session/create', (req: Request, res: Response) => {
+router.post('/session/create', async (req: Request, res: Response) => {
   const lanIp = getLocalNetworkIp();
   const sessionId = 'drone-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 7);
 
@@ -157,6 +207,19 @@ router.post('/session/create', (req: Request, res: Response) => {
       farmerId: req.body.farmerId || 'usr-farmer-001',
     },
   };
+
+  const survey = await getOrInitLatestSurveyResult();
+  if (survey) {
+    session.latestImage = {
+      url: survey.imageUrl,
+      filename: path.basename(survey.imageUrl),
+      uploadedAt: new Date(survey.timestamp).toISOString(),
+      source: 'phone_wifi',
+    };
+    session.analysis = survey.analysis;
+    session.status = 'completed';
+    session.phoneConnected = true;
+  }
 
   activeSessions.set(sessionId, session);
   latestActiveSessionId = sessionId;
@@ -178,10 +241,11 @@ router.post('/session/create', (req: Request, res: Response) => {
  * GET /api/drone/session/latest-active
  * Fetches the most recently created session or survey
  */
-router.get('/session/latest-active', (_req: Request, res: Response) => {
+router.get('/session/latest-active', async (_req: Request, res: Response) => {
+  const survey = await getOrInitLatestSurveyResult();
   return res.json({
     latestSessionId: latestActiveSessionId || 'drone-live-session',
-    latestSurvey: latestSurveyResult,
+    latestSurvey: survey,
   });
 });
 
@@ -189,7 +253,7 @@ router.get('/session/latest-active', (_req: Request, res: Response) => {
  * GET /api/drone/session/:id
  * Fetches status of an active session (for polling or initialization)
  */
-router.get('/session/:id', (req: Request, res: Response) => {
+router.get('/session/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   let session = activeSessions.get(id);
 
@@ -210,17 +274,20 @@ router.get('/session/:id', (req: Request, res: Response) => {
     activeSessions.set(id, session);
   }
 
-  // If this session has no photo yet, but an aerial survey was recently uploaded to ANY session, sync it!
-  if (!session.latestImage && latestSurveyResult && (Date.now() - latestSurveyResult.timestamp < 15 * 60 * 1000)) {
-    session.latestImage = {
-      url: latestSurveyResult.imageUrl,
-      filename: path.basename(latestSurveyResult.imageUrl),
-      uploadedAt: new Date(latestSurveyResult.timestamp).toISOString(),
-      source: 'phone_wifi',
-    };
-    session.analysis = latestSurveyResult.analysis;
-    session.status = 'completed';
-    session.phoneConnected = true;
+  // If this session has no photo yet, check latest survey
+  if (!session.latestImage) {
+    const survey = await getOrInitLatestSurveyResult();
+    if (survey) {
+      session.latestImage = {
+        url: survey.imageUrl,
+        filename: path.basename(survey.imageUrl),
+        uploadedAt: new Date(survey.timestamp).toISOString(),
+        source: 'phone_wifi',
+      };
+      session.analysis = survey.analysis;
+      session.status = 'completed';
+      session.phoneConnected = true;
+    }
   }
 
   return res.json({ session });

@@ -1,4 +1,7 @@
-export const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+export const API_BASE =
+  typeof window !== 'undefined'
+    ? ''
+    : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000');
 
 export function resolveImageUrl(url?: string | null): string {
   if (!url) return '';
@@ -6,7 +9,7 @@ export function resolveImageUrl(url?: string | null): string {
     return url;
   }
   if (url.startsWith('/uploads')) {
-    return `${API_BASE}${url}`;
+    return url;
   }
   return url;
 }

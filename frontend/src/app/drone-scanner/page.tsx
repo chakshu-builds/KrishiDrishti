@@ -354,53 +354,73 @@ export default function DroneScannerMobilePage() {
     }, 'image/jpeg', 0.85);
   };
 
-  // Transmit photo to backend (Multipart FormData + Base64 fallback)
+  // Transmit photo to backend (Multipart FormData + Base64 fallback + LAN fallback)
   const transmitPhotoToLaptop = async (imageBlob: Blob, base64Fallback: string) => {
     setIsTransmitting(true);
     setTransmissionSuccess(false);
     setTransmissionError(null);
 
-    try {
-      // 1. Try Multipart FormData (Fastest & handles any size without base64 overhead)
-      const formData = new FormData();
-      formData.append('photo', imageBlob, 'drone_aerial.jpg');
-      formData.append('cropName', 'Field Crop (खेत की फसल)');
-      formData.append('altitudeMeters', String(altitude));
-      formData.append('source', 'phone_camera');
+    const endpoints = [
+      `/api/drone/session/${sessionId}/upload`,
+      `http://192.168.163.177:3000/api/drone/session/${sessionId}/upload`,
+      `http://192.168.163.177:5000/api/drone/session/${sessionId}/upload`,
+    ];
 
-      let res = await fetch(`/api/drone/session/${sessionId}/upload`, {
-        method: 'POST',
-        body: formData,
-      });
+    let lastErrorMsg = '';
+    let succeeded = false;
 
-      // 2. If FormData fails, fallback to JSON Base64
-      if (!res.ok) {
-        console.warn('FormData upload failed, trying base64 fallback...');
-        res = await fetch(`/api/drone/session/${sessionId}/upload`, {
+    for (const endpoint of endpoints) {
+      if (succeeded) break;
+
+      try {
+        // 1. Try Multipart FormData (Fastest & handles any size without base64 overhead)
+        const formData = new FormData();
+        formData.append('photo', imageBlob, 'drone_aerial.jpg');
+        formData.append('cropName', 'Field Crop (खेत की फसल)');
+        formData.append('altitudeMeters', String(altitude));
+        formData.append('source', 'phone_camera');
+
+        let res = await fetch(endpoint, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            imageBase64: base64Fallback,
-            cropName: 'Field Crop (खेत की फसल)',
-            altitudeMeters: altitude,
-            source: 'phone_camera',
-          }),
+          body: formData,
         });
-      }
 
-      if (!res.ok) {
-        throw new Error(`Upload failed (Status: ${res.status})`);
-      }
+        // 2. If FormData fails, fallback to JSON Base64
+        if (!res.ok && res.status !== 502 && res.status !== 504) {
+          console.warn(`FormData failed on ${endpoint}, trying base64 fallback...`);
+          res = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              imageBase64: base64Fallback,
+              cropName: 'Field Crop (खेत की फसल)',
+              altitudeMeters: altitude,
+              source: 'phone_camera',
+            }),
+          });
+        }
 
-      const data = await res.json();
-      setTransmissionSuccess(true);
-      setAnalysisSummary(data.analysis);
-    } catch (err: any) {
-      console.error('Transmission error:', err);
-      setTransmissionError(err.message || 'Connection lost. Please tap retry.');
-    } finally {
-      setIsTransmitting(false);
+        if (res.ok) {
+          const data = await res.json();
+          setTransmissionSuccess(true);
+          setAnalysisSummary(data.analysis);
+          succeeded = true;
+          break;
+        } else {
+          lastErrorMsg = res.status === 502 || res.status === 504
+            ? 'The public tunnel URL was refreshed on laptop. Please scan the current QR code on your laptop screen.'
+            : `Upload rejected (Status: ${res.status})`;
+        }
+      } catch (err: any) {
+        lastErrorMsg = err.message || 'Connection lost. Please tap retry.';
+      }
     }
+
+    if (!succeeded) {
+      setTransmissionError(lastErrorMsg || 'Unable to beam to laptop. Please scan the updated QR code.');
+    }
+
+    setIsTransmitting(false);
   };
 
   const handleRetryUpload = () => {

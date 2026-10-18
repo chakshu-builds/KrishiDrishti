@@ -9,10 +9,11 @@ function startTunnel() {
   console.log('[TunnelRunner] Starting persistent localhost.run tunnel with keep-alive...');
 
   sshProcess = spawn('ssh', [
-    '-o', 'ServerAliveInterval=10',
-    '-o', 'ServerAliveCountMax=3',
+    '-o', 'ServerAliveInterval=15',
+    '-o', 'ServerAliveCountMax=8',
+    '-o', 'TCPKeepAlive=yes',
     '-o', 'StrictHostKeyChecking=no',
-    '-o', 'ExitOnForwardFailure=yes',
+    '-o', 'ExitOnForwardFailure=no',
     '-R', '80:127.0.0.1:3000',
     'nokey@localhost.run',
   ]);
@@ -52,6 +53,9 @@ function startTunnel() {
       const match = text.match(/https:\/\/([a-zA-Z0-9]+)\.lhr\.life/);
       if (match && match[0] !== currentTunnelUrl) {
         currentTunnelUrl = match[0];
+        try {
+          fs.writeFileSync('scripts/active_tunnel.txt', currentTunnelUrl, 'utf8');
+        } catch (_) {}
         fetch('http://localhost:5000/api/drone/set-tunnel', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

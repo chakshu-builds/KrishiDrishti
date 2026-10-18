@@ -95,8 +95,8 @@ export default function DevicesPage() {
         try {
           const res = await api.triggerSimulatorTick();
           if (res.readings && res.readings.length > 0) {
-            setTelemetry((prev) => [res.readings[0], ...prev.slice(0, 24)]);
-            setPumpActive(res.pumpActive);
+            setTelemetry((prev) => [...res.readings, ...prev.slice(0, 30)]);
+            if (res.pumpActive !== undefined) setPumpActive(res.pumpActive);
           }
         } catch (_) {}
       }, 3500);
@@ -114,10 +114,9 @@ export default function DevicesPage() {
     try {
       const res = await api.triggerSimulatorTick();
       if (res.readings && res.readings.length > 0) {
-        setTelemetry((prev) => [res.readings[0], ...prev.slice(0, 24)]);
-        setPumpActive(res.pumpActive);
+        setTelemetry((prev) => [...res.readings, ...prev.slice(0, 30)]);
+        if (res.pumpActive !== undefined) setPumpActive(res.pumpActive);
       }
-      await loadIoTData();
     } catch (err) {
       console.error('Manual tick error:', err);
     } finally {
@@ -132,9 +131,11 @@ export default function DevicesPage() {
       setPumpActive(res.pumpActive);
       setPumpFlowRate(res.flowRateLpm);
       setPumpWattage(res.wattageKw);
-      // Refresh telemetry right after pump toggle
-      const telRes = await api.getTelemetry(undefined, undefined, 20);
-      setTelemetry(telRes.readings || []);
+      // Immediately trigger a simulator tick to show instant moisture reaction
+      const tickRes = await api.triggerSimulatorTick();
+      if (tickRes.readings && tickRes.readings.length > 0) {
+        setTelemetry((prev) => [...tickRes.readings, ...prev.slice(0, 30)]);
+      }
     } catch (err) {
       console.error('Toggle pump error:', err);
     } finally {
@@ -147,10 +148,9 @@ export default function DevicesPage() {
     try {
       const res = await api.injectSimulatorScenario(scenario);
       if (res.readings && res.readings.length > 0) {
-        setTelemetry((prev) => [res.readings[0], ...prev.slice(0, 24)]);
+        setTelemetry((prev) => [...res.readings, ...prev.slice(0, 30)]);
         setPumpActive(res.pumpActive);
       }
-      await loadIoTData();
     } catch (err) {
       console.error('Scenario error:', err);
     }
@@ -178,19 +178,29 @@ export default function DevicesPage() {
     }
   };
 
-  // Latest telemetry reading
-  const latestReading = telemetry[0] || {
+  // Find latest readings that contain actual sensor measurements
+  const latestSoilReading = telemetry.find((t) => t.soilMoisturePct !== undefined) || {
     soilMoisturePct: 42.5,
     soilTemperatureC: 22.8,
+  };
+  const latestAmbientReading = telemetry.find((t) => t.airTemperatureC !== undefined) || {
     airTemperatureC: 26.5,
     humidityPct: 54,
+  };
+  const latestNpkReading = telemetry.find((t) => t.nitrogenMgKg !== undefined) || {
     nitrogenMgKg: 142,
     phosphorusMgKg: 35,
     potassiumMgKg: 194,
-    batteryPct: 92,
   };
 
-  const moisture = latestReading.soilMoisturePct ?? 42.5;
+  const moisture = Number(latestSoilReading.soilMoisturePct ?? 42.5);
+  const soilTemp = Number(latestSoilReading.soilTemperatureC ?? 22.8);
+  const airTemp = Number(latestAmbientReading.airTemperatureC ?? 26.5);
+  const humidity = Number(latestAmbientReading.humidityPct ?? 54);
+  const nitrogen = Number(latestNpkReading.nitrogenMgKg ?? 142);
+  const phosphorus = Number(latestNpkReading.phosphorusMgKg ?? 35);
+  const potassium = Number(latestNpkReading.potassiumMgKg ?? 194);
+
   const isDrought = moisture < 20;
   const isWaterlogged = moisture > 65;
   const isOptimal = moisture >= 30 && moisture <= 55;
@@ -420,7 +430,7 @@ export default function DevicesPage() {
 
           <div className="flex items-baseline justify-between pt-1">
             <div className="text-3xl md:text-4xl font-black text-agri-text-primary tracking-tight">
-              {(latestReading.soilTemperatureC ?? 22.8).toFixed(1)}°C
+              {soilTemp.toFixed(1)}°C
             </div>
             <span className="text-xs font-semibold text-agri-text-muted">Optimal: 18 - 25°C</span>
           </div>
@@ -450,11 +460,11 @@ export default function DevicesPage() {
 
           <div className="flex items-baseline justify-between pt-1">
             <div className="text-3xl md:text-4xl font-black text-agri-text-primary tracking-tight">
-              {(latestReading.airTemperatureC ?? 26.5).toFixed(1)}°C
+              {airTemp.toFixed(1)}°C
             </div>
             <div className="text-right">
               <span className="text-base font-bold text-teal-700 block">
-                {Math.round(latestReading.humidityPct ?? 54)}% RH
+                {Math.round(humidity)}% RH
               </span>
               <span className="text-[10px] text-agri-text-muted">Relative Humidity</span>
             </div>
@@ -487,19 +497,19 @@ export default function DevicesPage() {
             <div className="flex items-center justify-between">
               <span className="font-bold text-stone-700">Nitrogen (N):</span>
               <span className="font-mono font-bold text-emerald-700">
-                {latestReading.nitrogenMgKg ?? 142} mg/kg
+                {nitrogen} mg/kg
               </span>
             </div>
             <div className="flex items-center justify-between">
               <span className="font-bold text-stone-700">Phosphorus (P):</span>
               <span className="font-mono font-bold text-emerald-700">
-                {latestReading.phosphorusMgKg ?? 35} mg/kg
+                {phosphorus} mg/kg
               </span>
             </div>
             <div className="flex items-center justify-between">
               <span className="font-bold text-stone-700">Potassium (K):</span>
               <span className="font-mono font-bold text-emerald-700">
-                {latestReading.potassiumMgKg ?? 194} mg/kg
+                {potassium} mg/kg
               </span>
             </div>
           </div>
